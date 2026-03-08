@@ -1,0 +1,793 @@
+---
+output: pdf_document
+institute: null
+lang: es
+format:
+  pdf:
+    pdf-engine: xelatex
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    colorlinks: true
+    geometry: margin=2.5cm
+    fontsize: 11pt
+    fig-pos: H
+    include-in-header:
+      text: |
+        \usepackage{fancyhdr}
+        \pagestyle{fancy}
+        \fancyhead[L]{Econometría}
+        \fancyhead[R]{UNAM}
+subtitle: null
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+\begin{titlepage}
+\begin{center}
+
+\vspace*{3cm}
+
+{\Large UNIVERSIDAD NACIONAL AUTÓNOMA DE MÉXICO}\\[0.3cm]
+{\large ENES León | Economía Industrial}\\[4cm]
+
+% Título
+{\Huge \textbf{Modelo de Serie de Tiempo}}\\[0.3cm]
+{\Huge \textbf{con Análisis Econométrico}}\\[0.3cm]
+{\Huge \textbf{de la inflación en México}}\\[0.3cm]
+{\Huge \textbf{(1970 - 2025)}}\\[1.5cm]
+
+% Línea divisoria
+\rule{0.6\textwidth}{0.4pt}\\[1cm]
+
+% Información compacta
+\begin{tabular}{rl}
+\textbf{Curso:} & Econometría II \\[0.2cm]
+\textbf{Docente:} & Mtro. Francisco Javier Pedroza Castro \\[0.2cm]
+\textbf{Estudiante:} & Heidi Idali Pacheco Almaraz \\
+
+\end{tabular}
+
+\vfill
+
+{\large 06 de Marzo de 2026}\\
+{\large León, Guanajuato}
+
+\end{center}
+\end{titlepage}
+\newpage
+
+
+```{r setup, include=FALSE}
+# Configuramos de manera general los chunck de nuestro documento para un formato limpio
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = 'center',
+  out.width = '80%'
+)
+
+# Cargamos las librerías que ocuparemos a lo largo del documento
+library("tidyverse") 
+library("forecast") # Para el análisis de las series de tiempo
+library("tseries") # Para pruebas estadísticas
+library("kableExtra")
+library("knitr")
+library("readr")
+library("moments")
+library("FinTS")
+```
+
+
+\newpage
+
+
+# Resumen 
+
+En el presente documento se lleva a cabo un análisis del comportamiento de la inflación en México en los últimos 55 años, es decir, en un periodo de 1970-2025. Este análisis se realiza mediante la estimación y modelado del comportamiento de esta variable que subraya puntos de volatilidad significativos. De este modo, tras comprender su tendencia se prioriza pronosticar su comportamiento y proyectar la inflación mensual para el año 2026 con intervalos de confianza del 80% y 95%. 
+
+Para ello, se ha aplicado un modelo econométrico de series de tiempo de tipo ARIMA. En la que su construcción se basó de diagnósticos previos de estacionariedad, autocorrelación y criterios de información (Akaike y Bayesiano). Posteriormente, su proyección fue basada con diagnóstico de los residuos. 
+
+Antes de estimar el modelo final, el cual ocupamos para pronosticar la inflación 2026, se propusieron 5 modelos ARIMA diferentes. Esta comparación resultó en un ARIMA (1,0,1) pues fue el modelo con el menor AIC (-4486.701) y BIC (-4468.666). Sin embargo, el diagnóstico de los residuos resultó con limitaciones inherentes de los modelos lineales con quiebres estructurales.
+
+Es por ello por lo que deja en evidencia la necesidad de considerar otros factores influyentes en este indicador macroeconómico, de manera que se minimice el sesgo histórico de la serie y se mejore el pronóstico de la inflación, que, por el momento, se proyecta una inflación anual acumulada de 9.62%.
+
+
+# Introducción 
+
+Todas las naciones del mundo se enfrentan al fenómeno de la inflación, y México no es una excepción. Este fenómeno representa un aumento sostenido del nivel promedio de los precios, lo que en última instancia conlleva importantes costos sociales, como pérdidas en la asignación de recursos, disminución de la competitividad y deterioro de las condiciones de producción y empleo en todos los países. Este fenómeno refleja y cuantifica una serie de aumentos en el costo de los bienes y servicios durante un periodo específico, en el caso de este análisis, el periodo es de 55 años. Sin duda, es uno de los indicadores macroeconómicos clave para evaluar la estabilidad económica de una nación.
+
+Dado su impacto en el poder adquisitivo de los hogares mexicanos y en la política monetaria del país, es de suma importancia monitorear la tendencia de este indicador. Por lo tanto, medimos la inflación a través del INPC, que es el Índice Nacional de Precios al Consumidor, el cual también se define como el costo de una canasta de bienes y servicios en un momento específico en relación con un año base, obtenido por el gobierno a través de una encuesta nacional de hogares sobre artículos de consumo habitual. Así, el cambio porcentual en el INPC durante un período específico constituye la inflación de los precios al consumidor. 
+
+A través de los últimos años, México ha sido protagonista de cambios muy drásticos en la inflación pasando por etapas de hiperinflación, así como etapas de inflación controlada. Por ello, es importante entender cómo se mueve este indicador no solo de manera histórica, sino también de manera futura, tener como una noción de lo que podría pasar en décadas posteriores de manera que podamos tomar decisiones que fluctúan alrededor de la inflación, por ejemplo, una inversión.
+
+Así también, es relevante ya que este indicador macroeconómico impacta significativamente en el poder adquisitivo de las personas de un país si llega a niveles exorbitantes. Por el momento, se ha mantenido en un rango menor a 5%, no obstante, es necesario aun así poder modelar su comportamiento y crear pronósticos acertados para manejar de mejor manera sus efectos y que el país y la sociedad que habita en él no se vea tan perjudicada. 
+
+Así pues, a lo largo del presente trabajo se tiene como prioridad analizar la serie de tiempo de la inflación en México durante el periodo de 1970 hasta 2025, todo desde un enfoque mensual. De este modo, precisamos comprender la estructura que rige su comportamiento y estimar un modelo ARIMA que pronostique el mismo para este año y sea reproducible para los posteriores.
+
+## Hipótesis 
+
+Entre 1970 y 2025, se presenta un comportamiento temporal estadísticamente significativo en la inflación de México que puede explicarse y pronosticarse utilizando modelos de series de tiempo ARIMA.
+
+## Objetivo general 
+
+Comprender el comportamiento de la inflación en México entre 1970 y 2025. De tal manera que, nos permita estimar un modelo de serie de tiempo del tipo ARIMA y pronosticar el año 2026.
+
+## Objetivos específicos 
+
+1. Extraer y analizar la inflación mensual de México a través del INPC mensual y series de tiempo.
+
+2. Identificar el mejor modelo ARIMA que estime el comportamiento de la inflación mensual de México entre los años 1970-2025.
+
+3. Reforzar la estimación del modelo ARIMA mediante pruebas para la estacionariedad, autocorrelaciones y diagnósticos residuales.
+
+4. Realizar un pronostico del año 2026 para la inflación con un modelo ARIMA.
+
+## Alcance del proyecto
+
+### Alcance
+
+En el presente documento se emplea modelo de series de tiempo para llevar a cabo un análisis econométrico de la tendencia que tiene la inflación en México. En dicho análisis se utilizará una base de datos del Índice Nacional de Precios al Consumidor (INPC) de 1970 a 2025 obtenidos del Sistema de Información Económica (SIE) del Banco de México (BANXICO).
+
+Asimismo, este trabajo implica un análisis estadístico de la serie de tiempo de la inflación mediante pruebas de estacionariedad y pruebas de autocorrelación, combinando un modelo de series de tiempo ARIMA para observar y pronosticar los cambios temporales en este indicador macroeconómico. 
+
+### Limitaciones
+
+En el trabajo nos estaremos centrando únicamente en el análisis de la inflación, excluyendo otros indicadores macroeconómicos como los tipos de cambio y las tasas de interés. De igual manera, el alcance de este análisis se limita de manera nacional de México, evitando las distinciones regionales. 
+
+Asimismo, como una de las limitaciones técnicas en este análisis se presentan aquellas inherentes a los modelos de series de tiempo univariantes porque, como se mencionó anteriormente, solo nos estamos centrando en la inflación sin considerar otros indicadores influyentes. Del mismo modo, la disponibilidad y la frecuencia del Índice Nacional de Precios al Consumidor (INPC) durante el período que vamos a analizar constituye otra limitación técnica. 
+
+
+\newpage
+
+
+# Marco Teórico
+
+- **Inflación**
+
+La definición más común de inflación es un aumento general y sostenido de los precios dentro de una economía, un fenómeno causado por una demanda agregada que supera la oferta agregada dentro de esa economía. El exceso de oferta monetaria desencadena el proceso inflacionario, pero no es el único factor; otros factores influyentes también generan presiones inflacionarias.
+
+Ahora bien, la inflación se mide mediante un método creado por el Banco de México (BANXICO) y aplicado por el INEGI, o también conocido como el Instituto Nacional de Estadística y Geografía. Se trata de considerar la canasta representativa de bienes y servicios habituales de las familias mexicanas, derivado de la Encuesta Nacional de Ingresos y Gastos de los Hogares, para crear el Índice de Precios al Consumidor (INPC). Dicho índice pondera el patrón promedio del gasto representativo de una familia mexicana. 
+
+Es decir, se mide el nivel de precios en un tiempo dado a través del INPC y la inflación se construye con el cambio del INPC de un periodo a otro. 
+
+Así:
+
+$$
+y_t = (\frac{inpc_t - inpc_{base}}{inpc_{base}}) * 100
+$$
+
+Del cual: 
+
+1.  $inpc_t =$ Nivel de precios en el periodo $t$.
+
+2.  $inpc_base =$ Nivel de precios en el año base.
+
+
+- **Modelos de series de tiempo**
+
+Hablamos de un modelo de serie de tiempo cuando se lleva a cabo el análisi de series de tiempo que son secuenciales y tambien el pronóstico de la misma a futuro. En este tipo de modelos, se utilizan métodos estadísticos que permiten evaluar si existe algún patron en el comportamiento de los datos de la serie a través del tiempo. De tal manera que, se establecen correlación entre los datos de dicha serie, implicando que el valor de una observación en particular impacte en el valor de otra observación.
+
+Así mismo, los modelos de series de tiempo comprenden dos tipos: univariado y multivariado. El primero por su parte solo considera al tiempo como variable independiente mientras que las demás dependen de los datos históricos. Por otro lado, el modelo multivariado si consideran más variables independientes. 
+
+- **Media Móvil Integrada Autorregresiva (ARIMA)**
+
+Los modelos ARIMA predicen valores futuros basándose en eventos pasados, y suelen comprender series de tiempo estacionarias con estacionalidad y conjuntos de datos univariantes. El Dr. Luis Rincón define el modelo ARIMA en su libro *Introducción a las series de tiempo* de la siguiente manera:
+
+\boxed{
+\begin{minipage}{\textwidth}
+\textbf{Definición 1.} Sean \(p,d,q \geq 0\) números enteros. Una serie de tiempo \(\{X_t : t \in\mathbb {Z}\}\) sigue un modelo ARIMA(\(p,d,q\)) si la serie \(\{W_{t} : t \in\mathbb {Z}\}\) que aparece a continuación es un proceso ARMA(\(p,q\)), 
+
+\[W_{t} = (1-B)^dX_t \quad t \in \mathbb{Z}.\]
+\end{minipage}
+}
+
+Este modelo se aplica a datos que muestran características de tendencia, y el componente de tendencia se puede eliminar aplicando el operador de diferencia $\nabla^d = (1-B)^d$ para cierto número entero $d\geq0$.
+
+\newpage
+
+- **Modelos de Autorregresión (AR)**
+
+Este modelo predice los valores futuros de una variable basándose en los valores pasados de un término estocástico, pero el término estocástico es imperfectamente predecible. De igual manera, Luis Rincón lo define de la siguiente manera: 
+
+\boxed{
+\begin{minipage}{\textwidth}
+\textbf{Definición 2.} Sea \(p \geq 1\) un entero y sean \(\alpha_{1}, \ldots, \alpha_{p}\) constantes dadas tal que \(\alpha_{p} \neq 0\). Se dice que una serie de tiempo \(\{X_t : t \in\mathbb{Z}\}\) sigue un modelo autorregresivo de orden \(p\), y se le denota por las letras AR(\(p\)), si es de la forma
+\[X_t = \alpha_1 X_{t-1} + \cdots + \alpha_{p}X_{t-p} + Z_{t}\]
+\[= \sum_{k=1}^p \alpha_{k}X_{t-k} + Z_{t}, \quad t \in\mathbb{Z}.\]
+\end{minipage}
+}
+
+Aquí, $p$ indica el grado de retraso a utilizar en la predición. Si $p=1$ entonces, se trata del dato pasado en nuestra serie de tiempo.
+
+- **Modelos de Media Móvil (MA)**
+
+El modelo de Média Móvil predice los valores futuros a través del parámetro $q$, que indica el número de errores incluidos en la predicción. Estos modelos están construidos por un proceso de *white noise* de la siguiente forma: $\{Z_t : t \in\mathbb Z\}$, el cual, considera una $media = 0$ y $varianza = \sigma^2$.
+
+Ahora bien, el Dr. Luis Rincón la define como: 
+
+\boxed{
+\begin{minipage}{\textwidth}
+\textbf{Definición 3.} Sea \(q \geq 0\) un entero y sean \(\beta_{1}, \ldots, \beta_{q}\) constantes dadas, con \(\beta_{q} \neq 0\). Una serie de tiempo \(\{X_{t} : t \in\mathbb {Z}\}\) sigue un modelo de medias móviles de orden \(q\), y se le denota por las letras MA(\(q\)), si es de la forma:
+\[X_{t} = Z_{t} + \beta_{1}Z_{t-1}+ \cdots + \beta_{q}Z_{t-q}\]
+\[= \sum_{k=0}^{q} \beta_{k} Z_{t-k}, \quad t \in\mathbb {Z}. \quad (\beta_{0}=1)\]
+\end{minipage}
+}
+
+Es decir, si hablamos de un MA(1) entonces estamos considerando un error pasado. 
+
+- **Prueba Dickey-Fuller Aumentada (ADF)**
+
+La Prueb de Dickey-Fuller Aumentada, o sus siglas ADF, es una prueba estadística que permite definir si nuestra serie de tiempo es estacionario o si no es estacionaria. En otras palabras, esta prueba pretende comprobar su hipótesis nula que sostenia la existencia de una raíz unitaria (no estacionaria) en las series de tiempo.
+
+La base de esta prueba es la siguiente: 
+
+$$
+\Delta{y_t} = \alpha + \beta{t} + \gamma y_{t-1} + \sum_{i=1}^p \theta_i \Delta y_{t-yo} + \varepsilon_t
+$$
+
+De la cual deriva las siguientes hipótesis: 
+
+1. $H_{0} : \alpha = 1$ : proceso no estacionario (p-value > 0.05) 
+2. $H_{1} : \alpha < 1$ : proceso estacionario (p-value < 0.05)
+
+\newpage
+
+- **Función de Autocorrelación (ACF)**
+
+La Función de Autocorrelación representa la correlación de la serie de tiempo consigo misma en diferentes rezagos. De tal manera que, permite identificar patrones de estacionalidad, tendencias y persistencia de valores a lo largo del tiempo. Esta función no aísla la correlación directa entre un punto de datos y un rezago específico, sino incluye el efecto acumulativo de todos los rezagos intermedios.
+
+A continuación, se presenta su fórmula: 
+
+$$
+\rho_k = \frac{\gamma_k}{\gamma_0} = \frac{\sum_{t=k+1}^{n} (y_t-\bar{y})(y_{t-k} - \bar{y})}{\sum_{t=1}^{n}(y_t - \bar{y})^2}
+$$
+
+Si el valor es cercano a 1 entonces se trata de una correlación positiva, en el caso contrario, es una correlación negativa. Mientras que 0 indica que no existe autocorrelación.
+
+- **Función de Autocorrelación Parcial (PACF)**
+
+La Función de Autocorrelación Parcial (PACF) permite medir la correlación parcial entre una serie de tiempo estacionaria y sus propios valores pasados, tomando en cuenta y contabilizando los valores en todos los rezagos más cortos. Es de mucha importancia pues permite determinar los rezagos apropiados en un modelo Autorregresivo AR(p) o un modelo ARIMA(p,d,q). 
+
+Esta función de autocorrelación parcial de una serie de tiempo estacionaria se mide a través del algoritmo de Durbin-Levinson siguiente: 
+
+$$
+\phi_{k|X} = \frac{\gamma_k - \sum_{yo=1}^{k-1} \phi_{yo|X}\gamma_{k-i}}{1-\sum_{yo=1}^{k-1} \phi_{yo|X}\gamma_{yo}}
+$$
+
+Donde: 
+
+1. $\phi_{k|X} =$ autocorrelación parcial en el retardo k
+2. $\gamma_k=$ autocovarianza en el retardo k
+3. $\phi_{yo|X} =$ autocorrelación parcial en el retardo $i$, donde $i$ varía de 1 a $k-1$
+
+- **Prueba de Ljung-Box**
+
+Esta Prueba de Ljung-Box se utiliza para probar la falta de ajuste de un modelo de series de tiempo. Se aplica a los residuos de la serie de tiempo después de ajustar un modelo ARMA(p,q) a la base de datos. De tal manera que, determina si hay autocorrelaciones en los residuos, si existen y son muy pequeñas, entonces el modelo no presenta una falta de ajuste significativa. 
+
+Así pues, se define de la siguiente manera: 
+
+$$
+Q = n(n+2) \sum_{k=1}^{m} \frac{\hat{r}^2_k}{n-k}
+$$
+Donde: 
+
+1. $\hat{r}_k=$ autocorrelación estimada de la serie en el rezago $k$ 
+2. $m=$ número de rezagos probándose 
+
+En esta prueba, se rechaza la $H_{0}$ si $Q > X^2_{1-\alpha}, h$ lo que indica que el modelo tiene una falta de ajuste significativa. 
+
+\newpage
+
+- **Criterio de Información de Akaike (AIC)**
+
+El Criterio de Información de Akaike (AIC) se trata de una herramienta estadística que permite comparar diferentes modelos posibles y determinar el modelo que tiene un mejor ajuste a los datos. Se construye a partir del número de variables independientes utilizadas en la construcción del modelo, así como, de la estimación de máxima verosimilitud del modelo. 
+
+La fórmula del AIC es la siguiente: 
+
+$$
+AIC = 2K - 2ln(L)
+$$
+Donde:
+
+1. $K=$ número de variables independientes
+2. $L=$ estimación del logaritmo-verosimilitud 
+
+Si un modelo cuenta con más de 2 unidades del Criterio de Información de Akaike menor que el otro con el que estamos comparando, entonces indica que es significativamente mejor.
+
+- **Criterio de Información Bayesiano (BIC)**
+
+También conocido como Criterio de Información de Schwarz (SIC) se trata de una medida de bondad de ajuste de un modelo estadístico. Permite al igual que el AIC, seleccionar el mejor modelo frente a otros modelos. 
+
+Este criterio tiene su base en la función de probabilidad logarítmica, por lo tanto, está definido como: 
+
+$$
+BIC = klog(n) - 2log(L(\theta))
+$$
+Donde:
+
+1. $n =$ tamaño de la muestra
+2. $k =$ número de parámetros que el modelo estima
+3. $\theta =$ conjunto de todos los parámetros
+4. $L(\theta)=$ probabilidad del modelo probado
+
+Al comparar los modelos, aquel modelo con el BIC más bajo es considerado el mejor y viceversa.
+
+- **Prueba Jarque-Bera**
+
+Es una prueba estadística que permite observar si un conjunto de datos sigue una distribución normal. Se construye a traves de la medición de la asimetría de la distribución de probabilidad de una variable aleatoria de valor real, así como, de la curtosis para medir la "cola" de la distribución. 
+
+Este estadístico se calcula de la siguiente manera:
+
+$$
+JB = \frac{n}{6} (S^2+(K-3)^{\frac{2}{4}})
+$$
+
+Donde: 
+ 
+1. $n =$ tamaño de la muestra
+2. $S =$ asimetría
+3. $K =$ curtosis
+
+Si el estadístico de prueba es mayor que el valor crítico en un nivel de significancia 0.05 indica que no hay distribución normal y viceversa. 
+
+- **Prueba Heterocedasticidad Autorregresiva Condicional Automática (ARCH)**
+
+Es una prueba de ruido blanco, pero para una serie de tiempo cuadrada, la cual asume que la varianza depende de los eventos pasados. Así pues, es utilizada para analizar la volatilidad de las series de tiempo y pronosticar el riesgo en los valores futuros. 
+
+Por lo tanto, el efecto ARCH se basa en el tiempo variando la volatilidad condicional. 
+
+$$
+\sigma_{t}^2 = E[(x_t - \bar{x_{t}})^2] = E[x_{t}^2]- \bar{x_{t}}^2
+$$
+
+Donde: 
+
+1. $\sigma_{t}^2=$ varianza condicional
+
+2. $\bar{x_{t}}=$ media condicional
+
+\newpage
+
+
+# Metodología
+
+## Descripción del Hardware y Software utilizado
+
+El presente trabajo se llevó a cabo utilizando una computadora Huawei MateBook 14 (2020) con procesador Intel Core i5 10210U / i7-10510U, una pantalla de IPS 14 pulgadas y una tarjeta gráfica NVIDIA GeForce MX350, 2 GB GDDR5; el Software utilizado fue R versión 4.5.2 a través de un R Markdown. 
+
+## Descripción de la base de datos 
+
+### Fuente y período de la base de datos
+
+La base de datos se ha extraído directamente del Sistema de Información Económica (SÍE) de la página del Banco de México (BANXICO). En particular, corresponde al **Indice de Precios al Consumidor (INPC)** mensual.
+
+El periodo de análisis abarca 55 años desde **Enero de 1970 hasta Diciembre de 2025**. 
+
+### Variables del modelo
+
+```{r tabla-variables, echo=FALSE}
+variables_desc <- data.frame(
+  Variable = c("Inflación"),
+  Descripcion = c(
+    "Variación % del INPC que mide el aumento general y sostenido de los precios en México"
+  ),
+  Notacion = c("y[t]"),
+  Tipo = c("Dependiente"),
+  stringsAsFactors = FALSE
+)
+kable(variables_desc,
+      booktabs = TRUE,
+      caption = "Variable del modelo econométrico univariado",
+      col.names = c("Variable", "Descripción", "Notación", "Tipo"),
+      align = c("l", "l", "c", "c"),
+      escape = FALSE) %>%
+  column_spec(2, width = "6cm") %>%
+  kable_styling(latex_options = "hold_position", font_size = 8)
+```
+
+Construcción de la Inflación a partir del INPC: 
+
+- La inflación se calcula como diferencias logarítmicas:
+
+$$
+y_t = [ln(INPC_t)-ln(INPC_{t-1})] \times 100
+$$
+Donde 
+
+- $y_t =$ Tasa de inflación en el periodo $t$
+- $INPC_t =$ Índice Nacional de Precios al Consumidor en el periodo $t$
+- $INPC_{t-1} =$ Índice Nacional de Precios al Consumidor en el periodo anterior $t-1$
+
+## Especificación del Modelo
+
+El análisis del comportamiento de la Inflación en México durante 1970-2025 se llevará a cabo a través de un modelado de series de tiempo tipo ARIMA, de tal manera que, permita observar y pronosticar el comportamiento de este indicador macroeconómico. 
+
+## Limpieza y preparación de la base de datos 
+
+- Se exporta y carga la base de datos
+- Se realiza una revisión inicial de los datos
+- Se verifica que no existan valores faltantes (NAs)
+- Se construye la serie de tiempo del INPC 
+- Se crea la variable *Inflación* $y_t$ mediante diferencias logaritmicas 
+
+## Diagnósticos previos
+
+- Se realiza un Análisis Exploratorio de Datos (EDA)
+- Se analiza la dispersión por década mediante boxplots 
+- Se realizan pruebas de estacionariedad 
+- Se realizan pruebas de autocorrelación para identificar el modelo 
+
+## Estimación del Modelo 
+
+- Se estima el Modelo de tipo ARIMA
+- Se compara el modelo estimado con otros modelos para confirmar que sea el mejor
+- Se realiza un diagnóstico de los residuos (L-jung Box, Jarque-Bera, ARCH)
+
+## Pronóstico 
+
+- Se realizan pronósticos de la inflación.
+
+\newpage
+
+
+# Resultados 
+
+Los resultados que se presentarán a continuación están realizados bajo un código de R, el cual, está disponible en GitHub: https://github.com/heidipachec/ECONOMETRIA-II
+
+## Base de datos 
+
+### Cargar la base de datos 
+
+```{r}
+data <- read.csv("data.csv", stringsAsFactors = FALSE, header = TRUE)
+```
+
+### Revisión de la base de datos 
+
+```{r}
+head(data)
+tail(data)
+cat("Número de observaciones:", nrow(data), "\n")
+```
+
+### Verificación de valores faltantes (NA)
+
+```{r}
+colSums(is.na(data))
+```
+
+### Construcción de la serie de tiempo del INPC
+
+```{r}
+inpc_ts <- ts(
+  data = data$SP1,
+  start = c(1970, 1),
+  frequency = 12)
+```
+
+### Creación de la variable inflación 
+
+```{r}
+# Realizamos una transformación logaritmica de la serie del INPC
+log_inpc <- log(inpc_ts)
+
+# Realizamos una diferencia sobre la serie logaritmica del INPC
+inflacion <- diff(log_inpc)
+
+# Revisamos las observaciones de la variable 
+cat("Número de observaciones:", length(inflacion), "\n")
+```
+
+\newpage
+
+**Visualización de la Serie de Tiempo**
+
+```{r, fig.cap="Inflación Mensual en México durante 1970-2025"}
+# Graficamos un plot del comportamiento de la inflación a lo largo del tiempo
+autoplot(inflacion) +
+  geom_hline(yintercept = mean(inflacion), color = "darkred", linetype = "dashed")+
+  labs(title = "Inflación Mensual en México durante 1970 - 2025")+
+  theme_minimal()
+```
+
+
+**Interpretación:**
+
+En general, el comportamiento de la inflación ha sido muy volátil estos últimos 55 años pues las fluctuaciones mensuales que se observan en la gráfica son muy pronunciadas.
+
+- Entre 1985-1990, particularmente en 1988, observamos el punto más alto que alcanzó la inflación, el cual fue alrededor de 14 puntos porcentuales. Esto indica que, durante dicho año, la sociedad mexicana llegó a tener una disminución significativa en su poder adquisitivo y, por ende, en su calidad de vida. 
+
+- Los años posteriores a la década de los 90s muestran un comportamiento decreciente de la inflación: una baja muy significativa de este indicador. Sin embargo, a finales volvió a subir llegando alrededor de 7 y 8 puntos porcentuales.
+
+- El año 1995 registró el último pico grande, pues los años posteriores mantuvieron una inflación decreciente con un comportamiento bajo y estable que no supera la media, oscilando en valores menores del 5% de inflación. 
+
+Para poder observar de mejor manera el comportamiento de la inflación, pero, sobre todo, reforzar la gráfica anterior. A continuación, visualizamos la inflación en boxplots por década:
+
+\newpage
+
+```{r, fig.cap="Distribución de la Inflación por Décadas (1970-2025)"}
+# Creamos un data frame con valores de inflacion númericos
+inflacion_decada <- data.frame(
+  valor = as.numeric(inflacion),
+  decada = factor(floor(floor(time(inflacion))/10)*10) # Se calcula la década de cada valor, se redondea hacia abajo y se agrupan en grupos de 10 años.
+)
+
+# Graficamos el boxplot 
+ggplot(inflacion_decada, aes(x = decada, y = valor, fill = decada))+
+  geom_boxplot(outlier.alpha = 0.3)+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  labs(title = "Distribución de la Inflación por décadas (1970-2025)", x = "Década", y = "Inflación (%)")
+```
+
+En definitiva, se visualiza un gran contraste entre los primeros años con los últimos. En un inicio teníamos un México con inflaciones altísimas que llegaban hasta los dos dígitos, y ahora se mantienen relativamente estables, una inflación controlada la mayoría del tiempo.
+ 
+## Diagnósticos previos 
+
+### Análisis Exploratorio de Datos (EDA)
+
+```{r estadisticas-descriptivas}
+# Creamos un data frame que contenga las estadisticas descriptivas de la inflación
+stats_inflacion <- data.frame(
+  Variable = "Inflación",
+  Media = mean(inflacion, na.rm = TRUE),
+  Mediana = median(inflacion, na.rm = TRUE),
+  Desv_Est = sd(inflacion, na.rm = TRUE),
+  Varianza = var(inflacion, na.rm = TRUE),
+  Asimetria = skewness(inflacion, na.rm = TRUE),
+  Kurtosis = kurtosis(inflacion, na.rm = TRUE),
+  Min = min(inflacion, na.rm = TRUE),
+  Max = max(inflacion, na.rm = TRUE)
+  )
+
+kable(stats_inflacion,
+      digits = 4,
+      caption = "Estadísticas Descriptivas de la Inflación",
+      booktabs = TRUE,
+      col.names = c("Variable", "Media", "Mediana", "Desv. Est.","Varianza","Asimetría","Kurtosis","Mínimo", "Máximo"))
+```
+
+### Prueba de Estacionariedad 
+
+**Prueba Dickey-Fuller Aumentada**
+
+```{r}
+adf.test(inflacion)
+```
+
+Dado que el *p-value* es menor que 0.05: 0.02224, decimos que la serie es **estacionaria**. Por lo tanto, $d=0$
+
+
+### Pruebas de Autocorrelación (ACF-PACF)
+
+```{r}
+acf(inflacion)
+pacf(inflacion)
+```
+
+\newpage
+
+**Interpretación**
+
+Análisis de la Función de Autocorrelación ACF: 
+
+- La gráfica muestra una correlación positiva que desciende gradualmente. Asimismo, se reafirma una presencia estacionaria pero temporal con dependencia de largo plazo. Es decir, la inflación fluctúa alrededor de una media, pero con fuerte dependencia del periodo anterior, no corta abruptamente, por lo tanto, $q=0$.
+
+Análisis de la Función de Autocorrelación Parcial PACF: 
+
+- El pico más significativo se da en el *Lag* 1 lo que nos indica que hay una correlación parcial alta. Así mismo, se sigue un patrón de un proceso autorregresivo de orden 1 **AR(1)**, lo que significa que la Inflación depende altamente de su valor inmediato anterior sin generar dependencias significativas en los lags siguientes.
+
+## Estimación del Modelo
+
+### Modelo Autorregresivo de Orden uno AR(1)
+
+Dado los resultados obtenidos de estacionariedad y autocorrelación se estima un modelo autorregresivo de orden uno AR(1).
+
+$$
+y_t = c + \phi_1y_{t-1}+ \varepsilon t
+$$
+
+```{r}
+# Estimamos el Modelo ARIMA mediante el Método de MaximaVerosimilitud
+model <- arima(inflacion, order = c(1,0,0), method = "ML")
+coefficients(model)
+```
+
+Por lo tanto, la ecuación de nuestro modelo una vez reemplazado los coeficientes es la siguiente:
+
+$$
+y_t = 0.01366149 + 0.89137719y_{t-1} + \varepsilon t
+$$
+
+### Criterios de Información Akaike (AIC) y Bayesiano (BIC)
+
+```{r}
+# Hacemos una lista con el model 1 y otros modelos ARIMA con diferentes p,d,q (seleccionados arbitrariamente) para identificar el mejor 
+models <- list(
+  "(1,0,0)" = arima(inflacion, order = c(1,0,0), method = "ML"),
+  "(0,0,1)" = arima(inflacion, order = c(0,0,1), method = "ML"), 
+  "(1,0,1)" = arima(inflacion, order = c(1,0,1), method = "ML"),
+  "(2,0,1)" = arima(inflacion, order = c(2,0,1), method = "ML"),
+  "(2,0,0)" = arima(inflacion, order = c(2,0,0), method = "ML")
+)
+
+# Hacemos un data.frame para aplicar los criterios AIC y BIC
+comparacion <- data.frame(
+  Modelo = names(models),
+  AIC = sapply(models, AIC),
+  BIC = sapply(models, BIC),
+  row.names = NULL
+) %>% arrange(BIC) %>%
+  mutate(Modelo = paste0("ARIMA", Modelo))
+
+comparacion %>%
+  kable(
+    format = "latex",
+    booktabs = TRUE,
+    caption = "Criterio de Información Akaike y Bayesiano",
+    col.names = c("Modelo", "AIC", "BIC"),
+    digits = c(0, 4, 4)
+  ) %>%
+  kable_styling(
+    latex_options = c("scale_down", "hold_position"),
+    font_size = 9
+  )
+```
+
+**Interpretación**
+
+Las pruebas de Akaike y Bayesiano nos permiten observar el modelo que mejor explica el comportamiento de la inflación, este es el que tiene un valor menor a los demás. En este caso, el menor en la prueba de AIC es el modelo ARIMA(1,0,1), mientras que en el de la prueba de BIC es el modelo ARIMA(1,0,0). Si bien ambas pruebas no coinciden en el modelo, la diferencia es poco significativa, por lo tanto, optaremos por el mejor modelo que deriva de la prueba de Akaike. 
+
+Entonces **reestimamos** el **modelo ARIMA** pero ahora del tipo **(1,0,1)**:
+
+$$
+y_t = c + \phi_1y_{t-1}+ \varepsilon t - \theta_1 \varepsilon_{t-1}
+$$
+
+```{r}
+# Reestimamos el Modelo ARIMA mediante el Método de MaximaVerosimilitud
+model_2 <- arima(inflacion, order = c(1,0,1), method = "ML")
+coefficients(model)
+```
+
+Por lo tanto, la ecuación de nuestro **mejor modelo** una vez reemplazado los coeficientes es la siguiente:
+
+$$
+y_t = 0.01360972 + 0.91271084y_{t-1} + \varepsilon t + 0.10620097\varepsilon_{t-1}
+$$
+
+## Diagnóstico de los residuos
+
+Partimos del modelo reestimado dado los criterios de información: 
+
+```{r}
+# Prueba de Ljung-Box y observamos las gráficas de los residuos
+checkresiduals(model_2)
+
+# Normalidad de los residuos - Jarque-Bera
+jarque.test(as.numeric(residuals(model_2)))
+
+# Prueba de efecto de Heterocedasticidad Autorregresiva Condicional Automática
+ArchTest(residuals(model_2))
+```
+
+**Interpretación:**
+
+- Prueba Ljung-Box:
+
+Si observamos el valor de $p$ toca casi el 0, por lo tanto, rechazamos la hipótesis nula de la prueba y decimos que existe una autocorrelación en los residuos, por lo tanto, el modelo ARIMA que hemos planteado no está recibiendo toda la estructura de los datos. 
+
+- Normalidad de los residuos (Prueba Jarque-Bera):
+
+Nuevamente el $p$ valor es cercano a 0, de hecho, es igual al de la prueba Ljung-Box. Así pues, indica que los residuos del modelo no están siguiendo una distribución normal, resaltando una presencia de outliers (se puede observar algunos en el boxplot por década) en la inflación de México.
+
+- Heterocedastidad (Prueba ARCH)
+
+En esta prueba, volvemos a tener un resultado con presencia de heterocedasticidad condicional (ARCH) en los residuos. Es decir, la inflación sí presenta periodos con alta volatilidad y periodos con poca volatilidad consecuentemente. 
+
+## Pronóstico
+
+### Pronóstico de la Inflación Mensual 2026
+
+```{r fig.cap="Pronóstico Inflacionario Mensual en México 2026"}
+fit <- arima(inflacion, order = c(1,0,1))
+pronostico <- forecast(fit, h = 12) # 12 porque son 12 meses
+
+# Creamos un data frame de los pronóstico para darle formato al presentarlo
+date <- seq(from = as.Date("2026-01-01"), by = "month", length.out = 12) # Primero le damos un formato de fechas al periodo
+
+pronostico_tabla <- data.frame(
+  Fecha = format(date, "%Y-%m"),
+  Pronóstico = as.numeric(pronostico$mean*100),
+  IntConf_80_Inf = as.numeric(pronostico$lower[,1]),
+  IntConf_80_Sup = as.numeric(pronostico$upper[,1]),
+  IntConf_95_Inf = as.numeric(pronostico$lower[,2]),
+  IntConf_95_Sup = as.numeric(pronostico$upper[,2])
+)
+
+pronostico_tabla %>%
+    kable(
+    format = "latex",
+    booktabs = TRUE,
+    caption = "Pronóstico Inflacionario Mensual en México 2026",
+    col.names = c("Periodo","Pronóstico", "Lo80", "Hi80", "Lo95", "Hi95"),
+    digits = c(0, 4, 4, 4, 4, 4)
+  ) %>%
+  kable_styling(
+    latex_options = c("scale_down", "hold_position"),
+    font_size = 9
+  )
+  
+
+# Usamos la herramienta autoplot para visualizar la gráfica del pronóstico
+autoplot(pronostico)+
+  labs(title = "Pronóstico Inflacionario Mensual en México 2026",
+       subtitle = "ARIMA(1,0,1)",
+       y = "Inflación",
+       x = "Periodo"
+  )+
+  theme_minimal()
+```
+
+**Nota:** En el Cuadro 4 se están presentando los pronósticos en porcentaje y los valores de los Intervalos de Confianza de 80% y 95%, cada uno con su respectivo límite: inferior y superior.
+
+\newpage
+
+**Interpretación:**
+
+Se pronostica que el comportamiento inflacionario este año será creciente mes con mes, pero no abruptamente y descontrolada, su crecimiento es gradual. 
+
+Asimismo, la inflación anual acumulada que se proyecta es la siguiente:
+
+```{r}
+((exp(sum(pronostico$mean))-1)*100)
+```
+
+
+\newpage
+
+
+# Conclusiones 
+
+Según los resultados de la estimación del modelo ARIMA(1,0,1) de la serie de tiempo de la inflación, la tendencia inflacionaria durante el período de estudio mostró dos fases contrastantes: la primera mitad se caracterizó por una volatilidad inflacionaria significativa, con una tasa de inflación que alcanzó hasta 14 puntos porcentuales. Posteriormente, durante los años siguientes, la volatilidad disminuyó gradualmente, lo que condujo a un periodo en el que la tasa de inflación se mantuvo constantemente por debajo de los 5 puntos porcentuales. 
+
+Además, los resultados de la estimación del modelo indican que los valores de inflación pasados ejercen una influencia significativa a la hora de explicar el comportamiento futuro de la inflación, lo que sugiere que la serie inflacionaria presenta una característica de memoria a largo plazo. Sin embargo, la conclusión final del diagnóstico residual indicó que el modelo ARIMA (para el periodo de estudio) no era la opción óptima para pronosticar a este indicador macroeconómico. Esto se debió a que el modelo no logró captar plenamente las características estructurales de la serie de tiempo de la inflación (como los quiebres estructurales) y no reflejó suficientemente los cambios en la volatilidad de este indicador macroeconómico durante el modelado. 
+
+Esto nos lleva al pronóstico para el año 2026, el cual sugiere que la tasa de inflación mensual mostrará un comportamiento creciente pero controlado, ya que, teniendo en cuenta las limitaciones del modelo mencionadas, este pronóstico no refleja necesariamente la realidad; en última instancia, solo indica que el modelo estimado sigue reflejando los datos históricos de la inflación de las décadas pasadas. 
+
+Es decir, la hipótesis en la que se basa este trabajo (que el comportamiento de la inflación puede pronosticarse mediante modelos de series de tiempo ARIMA) no ha sido refutada por completo. Sin embargo, nos percatamos que si incorporamos más variables que influyen en este indicador macroeconómico y utilizamos variables dummies para manejar los quiebres estructurales que nos limitaron se podría esperar otros resultados que superen el sesgo histórico de nuestro modelo y contribuyan a un pronóstico de la inflación más realista. 
+
+
+\newpage
+
+
+# Referencias Bibliográficas 
+
+- *Augmented dickey-fuller (ADF)*. (2025, June 17). GeeksforGeeks.
+https://www.geeksforgeeks.org/machine-learning/augmented-dickey-fuller-adf/
+
+- Belcic, I., & Stryker, C. (2025, November 26). *¿Qué es un modelo de series temporales?* *ibm.com*.
+https://www.ibm.com/mx-es/think/topics/time-series-model
+
+- *Box-Ljung Test.* (n.d.). Nist.gov. Retrieved March 7, 2026, from https://www.itl.nist.gov/div898/handbook/pmc/section4/pmc4481.htm
+
+- Heath, J. (2018). *Lo que indican los indicadores. Cómo utilizar la información estadística para entender la realidad económica de México*. INEGI/Instituto Nacional de Estadística y Geografía.
+https://archivos.juridicas.unam.mx/www/bjv/libros/11/5238/14.pdf
+
+- Luis Rincón y Verónica De Jesús Romo. *Una introducción a las series de tiempo*. Departamento de Matemáticas, Facultad de Ciencias, UNAM. Ciudad de México, México: Universidad Nacional Autónoma de México, 2025.
+https://docencia.fciencias.unam.mx/lars/libros/Rinc%C3%B3n-DeJes%C3%BAs%282025%29Series.pdf
+
+- (N.d.). Statisticshowto.com. Retrieved March 7, 2026, from
+https://www.statisticshowto.com/bayesian-information-criterio
+
+- Oner, C. (2009). ¿Qué es la inflación?. *Finance & Development*. https://www.imf.org/external/pubs/ft/fandd/spa/2010/03/pdf/basics.pdf
+
+- Qué es: Prueba de Jarque-Bera. (2024, julio 27). LEARN STATISTICS EASILY. https://es.statisticseasily.com/glosario/%C2%BFQu%C3%A9-es-la-descripci%C3%B3n-estad%C3%ADstica-de-la-prueba-de-Jarque-Bera%3F/
+
+- (S/f-b). Numxl.com. Recuperado el 8 de marzo de 2026, de https://support.numxl.com/hc/es/articles/214065006-Ap%C3%A9ndice-C-Criterio-de-Informaci%C3%B3n-Bayesiano-Schwarz-BIC-SIC
+
+- *Understanding partial autocorrelation functions (PACF) in time series data*. (2024, February 1). GeeksforGeeks.
+https://www.geeksforgeeks.org/machine-learning/understanding-partial-autocorrelation-functions-pacf-in-time-series-data/

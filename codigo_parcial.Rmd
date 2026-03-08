@@ -1,0 +1,271 @@
+---
+title: "Modelo de Serie de Tiempo con Análisis Econométrico de la Inflación en México (1970-2025)"
+author: "Heidi Idali Pacheco Almaraz"
+date: "2026-03-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+# Configuramos de manera general los chunck de nuestro documento para un formato limpio
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = 'center',
+  out.width = '80%'
+)
+
+# Cargamos las librerías que ocuparemos a lo largo del documento
+library("tidyverse") 
+library("forecast") # Para el análisis de las series de tiempo
+library("tseries") # Para pruebas estadísticas
+library("kableExtra")
+library("knitr")
+library("readr")
+library("moments")
+library("FinTS")
+```
+
+# Metodología
+
+### Variables del modelo
+
+```{r tabla-variables, echo=TRUE}
+variables_desc <- data.frame(
+  Variable = c("Inflación"),
+  Descripcion = c(
+    "Variación % del INPC que mide el aumento general y sostenido de los precios en México"
+  ),
+  Notacion = c("y[t]"),
+  Tipo = c("Dependiente"),
+  stringsAsFactors = FALSE
+)
+kable(variables_desc,
+      booktabs = TRUE,
+      caption = "Variable del modelo econométrico univariado",
+      col.names = c("Variable", "Descripción", "Notación", "Tipo"),
+      align = c("l", "l", "c", "c"),
+      escape = FALSE) %>%
+  column_spec(2, width = "6cm") %>%
+  kable_styling(latex_options = "hold_position", font_size = 8)
+```
+
+
+# Resultados 
+
+## Base de datos 
+
+### Cargar la base de datos 
+
+```{r}
+data <- read.csv("data.csv", stringsAsFactors = FALSE, header = TRUE)
+```
+
+### Revisión de la base de datos 
+
+```{r}
+head(data)
+tail(data)
+cat("Número de observaciones:", nrow(data), "\n")
+```
+
+### Verificación de valores faltantes (NA)
+
+```{r}
+colSums(is.na(data))
+```
+
+### Construcción de la serie de tiempo del INPC
+
+```{r}
+inpc_ts <- ts(
+  data = data$SP1,
+  start = c(1970, 1),
+  frequency = 12)
+```
+
+### Creación de la variable inflación 
+
+```{r}
+# Realizamos una transformación logaritmica de la serie del INPC
+log_inpc <- log(inpc_ts)
+
+# Realizamos una diferencia sobre la serie logaritmica del INPC
+inflacion <- diff(log_inpc)
+
+# Revisamos las observaciones de la variable 
+cat("Número de observaciones:", length(inflacion), "\n")
+```
+
+**Visualización de la Serie de Tiempo**
+
+```{r, fig.cap="Inflación Mensual en México durante 1970-2025"}
+# Graficamos un plot del comportamiento de la inflación a lo largo del tiempo
+autoplot(inflacion) +
+  geom_hline(yintercept = mean(inflacion), color = "darkred", linetype = "dashed")+
+  labs(title = "Inflación Mensual en México durante 1970 - 2025")+
+  theme_minimal()
+```
+
+```{r, fig.cap="Distribución de la Inflación por Décadas (1970-2025)"}
+# Creamos un data frame con valores de inflacion númericos
+inflacion_decada <- data.frame(
+  valor = as.numeric(inflacion),
+  decada = factor(floor(floor(time(inflacion))/10)*10) # Se calcula la década de cada valor, se redondea hacia abajo y se agrupan en grupos de 10 años.
+)
+
+# Graficamos el boxplot 
+ggplot(inflacion_decada, aes(x = decada, y = valor, fill = decada))+
+  geom_boxplot(outlier.alpha = 0.3)+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  labs(title = "Distribución de la Inflación por décadas (1970-2025)", x = "Década", y = "Inflación (%)")
+```
+
+## Diagnósticos previos 
+
+### Análisis Exploratorio de Datos (EDA)
+
+```{r estadisticas-descriptivas}
+# Creamos un data frame que contenga las estadisticas descriptivas de la inflación
+stats_inflacion <- data.frame(
+  Variable = "Inflación",
+  Media = mean(inflacion, na.rm = TRUE),
+  Mediana = median(inflacion, na.rm = TRUE),
+  Desv_Est = sd(inflacion, na.rm = TRUE),
+  Varianza = var(inflacion, na.rm = TRUE),
+  Asimetria = skewness(inflacion, na.rm = TRUE),
+  Kurtosis = kurtosis(inflacion, na.rm = TRUE),
+  Min = min(inflacion, na.rm = TRUE),
+  Max = max(inflacion, na.rm = TRUE)
+  )
+
+kable(stats_inflacion,
+      digits = 4,
+      caption = "Estadísticas Descriptivas de la Inflación",
+      booktabs = TRUE,
+      col.names = c("Variable", "Media", "Mediana", "Desv. Est.","Varianza","Asimetría","Kurtosis","Mínimo", "Máximo"))
+```
+
+### Prueba de Estacionariedad 
+
+**Prueba Dickey-Fuller Aumentada**
+
+```{r}
+adf.test(inflacion)
+```
+
+### Pruebas de Autocorrelación (ACF-PACF)
+
+```{r}
+acf(inflacion)
+pacf(inflacion)
+```
+
+## Estimación del Modelo
+
+### Modelo Autorregresivo de Orden uno AR(1)
+
+```{r}
+# Estimamos el Modelo ARIMA mediante el Método de MaximaVerosimilitud
+model <- arima(inflacion, order = c(1,0,0), method = "ML")
+coefficients(model)
+```
+
+### Criterios de Información Akaike (AIC) y Bayesiano (BIC)
+
+```{r}
+# Hacemos una lista con el model 1 y otros modelos ARIMA con diferentes p,d,q (seleccionados arbitrariamente) para identificar el mejor 
+models <- list(
+  "(1,0,0)" = arima(inflacion, order = c(1,0,0), method = "ML"),
+  "(0,0,1)" = arima(inflacion, order = c(0,0,1), method = "ML"), 
+  "(1,0,1)" = arima(inflacion, order = c(1,0,1), method = "ML"),
+  "(2,0,1)" = arima(inflacion, order = c(2,0,1), method = "ML"),
+  "(2,0,0)" = arima(inflacion, order = c(2,0,0), method = "ML")
+)
+
+# Hacemos un data.frame para aplicar los criterios AIC y BIC
+comparacion <- data.frame(
+  Modelo = names(models),
+  AIC = sapply(models, AIC),
+  BIC = sapply(models, BIC),
+  row.names = NULL
+) %>% arrange(BIC) %>%
+  mutate(Modelo = paste0("ARIMA", Modelo))
+
+comparacion %>%
+  kable(
+    format = "latex",
+    booktabs = TRUE,
+    caption = "Criterio de Información Akaike y Bayesiano",
+    col.names = c("Modelo", "AIC", "BIC"),
+    digits = c(0, 4, 4)
+  ) %>%
+  kable_styling(
+    latex_options = c("scale_down", "hold_position"),
+    font_size = 9
+  )
+```
+
+```{r}
+# Reestimamos el Modelo ARIMA mediante el Método de MaximaVerosimilitud
+model_2 <- arima(inflacion, order = c(1,0,1), method = "ML")
+coefficients(model)
+```
+
+## Diagnóstico de los residuos
+
+```{r}
+# Prueba de Ljung-Box y observamos las gráficas de los residuos
+checkresiduals(model_2)
+
+# Normalidad de los residuos - Jarque-Bera
+jarque.test(as.numeric(residuals(model_2)))
+
+# Prueba de efecto de Heterocedasticidad Autorregresiva Condicional Automática
+ArchTest(residuals(model_2))
+```
+
+## Pronóstico
+
+### Pronóstico de la Inflación Mensual 2026
+
+```{r fig.cap="Pronóstico Inflacionario Mensual en México 2026"}
+fit <- arima(inflacion, order = c(1,0,1))
+pronostico <- forecast(fit, h = 12) # 12 porque son 12 meses
+
+# Creamos un data frame de los pronóstico para darle formato al presentarlo
+date <- seq(from = as.Date("2026-01-01"), by = "month", length.out = 12) # Primero le damos un formato de fechas al periodo
+
+pronostico_tabla <- data.frame(
+  Fecha = format(date, "%Y-%m"),
+  Pronóstico = as.numeric(pronostico$mean*100),
+  IntConf_80_Inf = as.numeric(pronostico$lower[,1]),
+  IntConf_80_Sup = as.numeric(pronostico$upper[,1]),
+  IntConf_95_Inf = as.numeric(pronostico$lower[,2]),
+  IntConf_95_Sup = as.numeric(pronostico$upper[,2])
+)
+
+pronostico_tabla %>%
+    kable(
+    format = "latex",
+    booktabs = TRUE,
+    caption = "Pronóstico Inflacionario Mensual en México 2026",
+    col.names = c("Periodo","Pronóstico", "Lo80", "Hi80", "Lo95", "Hi95"),
+    digits = c(0, 4, 4, 4, 4, 4)
+  ) %>%
+  kable_styling(
+    latex_options = c("scale_down", "hold_position"),
+    font_size = 9
+  )
+  
+
+# Usamos la herramienta autoplot para visualizar la gráfica del pronóstico
+autoplot(pronostico)+
+  labs(title = "Pronóstico Inflacionario Mensual en México 2026",
+       subtitle = "ARIMA(1,0,1)",
+       y = "Inflación",
+       x = "Periodo"
+  )+
+  theme_minimal()
+```

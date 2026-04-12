@@ -1,0 +1,541 @@
+---
+output: pdf_document
+institute: null
+lang: es
+format:
+  pdf:
+    pdf-engine: xelatex
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    colorlinks: true
+    geometry: margin=1.5cm
+    fontsize: 10pt
+    fig-pos: H
+    include-in-header:
+      text: |
+        \usepackage{fancyhdr}
+        \pagestyle{fancy}
+        \fancyhead[L]{Econometría}
+        \fancyhead[R]{UNAM}
+subtitle: null
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+\begin{titlepage}
+\begin{center}
+
+\vspace*{3cm}
+
+{\Large UNIVERSIDAD NACIONAL AUTÓNOMA DE MÉXICO}\\[0.3cm]
+{\large ENES León | Economía Industrial}\\[4cm]
+
+% Título
+{\Huge \textbf{Precios de los Futuros del Oro}}\\[0.3cm]
+{\Huge \textbf{2005-2026: Fluctuación y Volatilidad}}\\[0.3cm]
+{\Huge \textbf{(Un Análisis Econométrico)}}\\[1.5cm]
+
+% Línea divisoria
+\rule{0.6\textwidth}{0.4pt}\\[1cm]
+
+% Información compacta
+\begin{tabular}{rl}
+\textbf{Curso:} & Econometría II \\[0.2cm]
+\textbf{Docente:} & Mtro. Francisco Javier Pedroza Castro \\[0.2cm]
+\textbf{Estudiante:} & Heidi Idali Pacheco Almaraz \\
+
+\end{tabular}
+
+\vfill
+
+{\large 10 de Abril de 2026}\\
+{\large León, Guanajuato}
+
+\end{center}
+\end{titlepage}
+\newpage
+
+
+```{r setup, include=FALSE}
+# Configuramos de manera general los chunck de nuestro documento para un formato limpio
+knitr::opts_chunk$set(
+  echo = FALSE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = 'center',
+  fig.width = 6,
+  fig.height = 3.5,
+  out.width = '80%'
+)
+
+# Cargamos las librerías que ocuparemos a lo largo del documento
+library("knitr")
+library("kableExtra")
+library("readr")
+library("lubridate")
+library("ggplot2")
+library("moments")
+library("tseries")
+library("xts")
+library("urca")
+library("FinTS")
+library("vars")
+library("rugarch")
+library("dplyr")
+```
+
+# Resultados 
+
+## Limpieza y preparación de la base de datos
+
+```{r}
+# Cargamos la base de datos
+datos <- read.csv("data.csv", stringsAsFactors = FALSE) %>%
+
+# Renombramos las columnas 
+rename(date = Date, price = Price, open = Open, high = High, low = Low, volume = Vol, change_pct = Change) %>%
+  mutate(
+
+# Estandarizamos el formato de la columna Fecha 
+    date = parse_date_time(date, orders = c("m/d/Y", "m-d-Y")),
+
+# Quitamos el separador de miles en los datos
+    volume = as.numeric(gsub(",", "", volume)),
+price = as.numeric(gsub(",", "", price)),
+
+# Calculamos los retornos logarítmicos r[t]
+rt = log(price) - log(lag(price))
+  ) %>%
+  
+  filter(!is.na(date),!is.na(price),!is.na(rt),volume > 0) %>%
+           arrange(date)
+```
+
+## Análisis Exploratorio de Datos (EDA)
+
+### Gráfica de series temporales: original y logarítmica
+
+```{r, fig.cap = "Precio de Futuros del Oro (2005-2026) y Retornos Logarítmicos"}
+
+
+par(mfrow = c(1,2))
+
+# Graficamos la serie original 
+plot(datos$date, datos$price,
+     type = "l",
+     col = "#1F3864",
+     main = "Precio de Futuros del Oro",
+     xlab = "Fecha",
+     ylab = "Precio",
+     cex.main = 1.2)
+
+# Graficamos la serie logarítmica
+plot(datos$date, datos$rt,
+     type = "l",
+     col = "#C0392B",
+     lwd = 0.3,
+     main = "Retornos Logarítmicos Diarios",
+     xlab = "Fecha",
+     ylab = "r[t]",
+     cex.main = 1.2)
+
+par(mfrow = c(1,1))
+```
+
+**Interpretación:**
+
+- Precio de Futuros del Oro (2005-2026)
+
+En esta gráfica podemos observar que la serie de tiempo tiene una tendencia creciente con sostenibilidad pero sin reversión a una media fija. Así mismo, se observan tres fases: la primera, una alza acelerada en 2005-20011, la segunda, una consolidación en 2012-2018, la tercera, una alza en 2019-2026 tocando un precio aproximado de 5,000.
+
+- Retornos Logarítmicos Diarios de los Futuros del Oro
+
+En esta gráfica la serie de tiempo tiene una media muy cercana a cero pero no parece tener tendencia, esto implicaría que es estacionaria en primera diferencia. Por otro lado, la dispersión de los datos no llega a ser homogénea, podemos observar que hay periodos de alta volatilidad como en 2008, 2020 con un retorno bajo aproximado de -0.10, y en el último año. Así pues, se identifica que los periodos de alta volatilidad se han agrupado y persisten. 
+
+### Estadísticas Descriptivas
+
+```{r}
+# Creamos un data frame que contenga las estadísticas descriptivas
+eda_oro <- data.frame(
+Variable = c("Precio", "Retorno Log", "Volumen"),
+Media = c(mean(datos$price, na.rm = TRUE), mean(datos$rt, na.rm = TRUE), mean(datos$volume, na.rm = TRUE)),
+Desv_Est = c(sd(datos$price, na.rm = TRUE), sd(datos$rt, na.rm = TRUE), sd(datos$volume, na.rm = TRUE)),
+Asimetria = c(skewness(datos$price[!is.na(datos$price)]), skewness(datos$rt[!is.na(datos$rt)]), skewness(datos$volume[!is.na(datos$volume)])),
+Kurtosis = c(kurtosis(datos$price[!is.na(datos$price)]), kurtosis(datos$rt[!is.na(datos$rt)]), kurtosis(datos$volume[!is.na(datos$volume)]))
+)
+
+kable(eda_oro,
+      digits = 4,
+      caption = "Estadisticas Descriptivas de Futuros del Oro (2005-2026)",
+      booktabs = TRUE,
+      col.names = c("Variable", "Media", "Desv. Est.", "Asimetría", "Curtosis"))
+```
+
+### Prueba de Normalidad Jarque-Bera en los Retornos Logarítmicos
+
+```{r}
+jb_prueba <- jarque.bera.test(datos$rt)
+
+# Data Frame 
+jb <- data.frame(
+  Prueba = "Prueba de Jarque Bera",
+  Estadistico = jb_prueba$statistic,
+  Grados_Libertad = jb_prueba$parameter,
+  P_valor = jb_prueba$p.value,
+  Conclusión = ifelse(jb_prueba$p.value < 0.05, "Rechaza Normalidad", "No rechaza normalidad")
+)
+
+kable(jb,
+      digits = 4,
+      caption = "Prueba de Normalidad Jarque-Bera para los Retornos Logarítmicos",
+      booktabs = TRUE,
+      col.names = c("Prueba", "Estadístico", "Grados de Libertad", "p-valor", "Interpretación"))
+```
+
+### Gráfica de la Función de Autocorrelación (ACF) y Función de Autocorrelació Parcial (PACF): precio y rendimientos logarítmicos
+
+```{r, fig.cap="Función de Autocorrelación y Autocorrelación Parcial de los precios y rendimientos logarítmicos"}
+par(mfrow = c(2,2))
+acf(datos$price, main = "ACF - Precio")
+pacf(datos$price, main = "PACF - Precio")
+acf(datos$rt, main = "ACF - Retornos Logarítmicos")
+pacf(datos$rt, main = "PACF - Retornos Logarítmicos")
+par(mfrow = c(1,1))
+```
+
+**Interpretación:**
+
+- ACF y PACF - Precio 
+
+En la gráfica de autocorrelación se puede observar que existen relaciones significativas y persistentes en los rezagos pues están muy aproximadas a 1.0 sin tocar el intervalo de confianza. Esto indica que es una serie no estacionaria con raíz unitaria, es decir, cada valor está altamente correlacionado con sus datos históricos. 
+
+Por otro lado, en el gráfica de autocorrelación parcial se reafirma lo anterior, aquí el primer rezago es el único significativo mientras que el resto de los rezagos tocan los intervalos de confianza. Esto indica un modelo AR(1) con caminata aleatoria.
+
+- ACF y PACF - Retornos Logarítmicos
+
+En la gráfica de autocorrelación se identifica que el rezago cero es el único significativo mientras que los demás rezagos tocan el intervalo de confianza, indicando de tal manera una ausencia de autocorrelación lineal en la serie de tiempo.
+
+## Pruebas de Raíces Unitarias
+
+### Prueba de Dickey-Fuller Aumentada
+
+```{r}
+# Serie de precios
+adf_precio <- adf.test(datos$price, alternative = "stationary", k = 10)
+
+# Serie de retornos 
+adf_rt <- adf.test(datos$rt, alternative = "stationary", k = 10)
+
+# Volumen en niveles y diferencias
+vol_diff <- diff(datos$volume)
+adf_vol_precio <- adf.test(datos$volume, k = 10)
+adf_vol_diff <- adf.test(vol_diff, k = 10)
+
+# Creamos un data frame con los resultados 
+adf_resultados <- data.frame(
+  Serie = c("Precio", "Retorno Logarítmico", "Volumen (niveles)", "Volumen(diferencias)"),
+  Estadistico = c(adf_precio$statistic, adf_rt$statistic, adf_vol_precio$statistic, adf_vol_diff$statistic),
+  P_value = c(adf_precio$p.value, adf_rt$p.value, adf_vol_precio$p.value, adf_vol_diff$p.value),
+  Interpretación = c(
+    ifelse(adf_precio$p.value < 0.05, "Estacionaria", "No estacionaria"), 
+    ifelse(adf_rt$p.value < 0.05, "Estacionaria", "No estacionaria"), 
+    ifelse(adf_vol_precio$p.value < 0.05, "Estacionaria", "No estacionaria"), 
+    ifelse(adf_vol_diff$p.value < 0.05, "Estacionaria", "No estacionaria")
+  )
+)
+
+kable(adf_resultados,
+      digits = 4,
+      caption = "Prueba de Dickey-Fuller Aumentada",
+      booktabs = TRUE,
+      col.names = c("Serie", "Estadístico", "p-valor", "Interpretación"))
+```
+
+```{r}
+ur_tendencia <- ur.df(datos$price, type = "trend", selectlags = "AIC")
+ur_intercepto <- ur.df(datos$price, type = "drift", selectlags = "AIC")
+ur_rt <- ur.df(datos$rt, type = "drift", selectlags = "AIC")
+
+# Creamos un data frame con los resultados
+resultados_ur <- data.frame(
+  Serie = c("Precio (con tendencia)", "Precio (con intercepto)", "Retornos (con intercepto)"),
+  Estadistico = c(ur_tendencia@teststat[1], ur_intercepto@teststat[1], ur_rt@teststat[1]),
+  Valor_Critico_1pct = c(ur_tendencia@cval[1,1], ur_intercepto@cval[1,1], ur_rt@cval[1,1]),
+  Valor_Critico_5pct = c(ur_tendencia@cval[1,2], ur_intercepto@cval[1,2], ur_rt@cval[1,2]),
+  Valor_Critico_10pct = c(ur_tendencia@cval[1,3], ur_intercepto@cval[1,3], ur_rt@cval[1,3]),
+  Interpretación = c(
+    ifelse(ur_tendencia@teststat[1] < ur_tendencia@cval[1,2], "Estacionaria", "No estacionaria"),
+    ifelse(ur_intercepto@teststat[1] < ur_intercepto@cval[1,2], "Estacionaria", "No estacionaria"),
+    ifelse(ur_rt@teststat[1] < ur_rt@cval[1,2], "Estacionaria", "No estacionaria")
+  )
+)
+
+kable(resultados_ur,
+      digits = 4,
+      caption = "Prueba de Dickey-Fuller Aumentada con regresión",
+      booktabs = TRUE,
+      col.names = c("Serie", "Estadístico", "V.C. 1%", "V.C. 5%", "V.C. 10%", "Interpretación"))
+```
+
+### Prueba de Zivot-Andrews
+
+```{r}
+# Nivel
+za_model_A <- ur.za(datos$price, model = "intercept", lag = 10)
+
+# Tendencia
+za_model_B <- ur.za(datos$price, model = "trend", lag = 10)
+
+# Nivel y tendencia
+za_model_C <- ur.za(datos$price, model = "both", lag = 10)
+
+# Creamos un data frame con los resultados
+resultados_za <- data.frame(
+  Modelo = c("Modelo A (Intercepto)", "Modelo B (Tendencia)", "Modelo C (Nivel y Tendencia)"),
+  Estadistico = c(za_model_A@teststat, za_model_B@teststat, za_model_C@teststat),
+  Valor_Critico_1pct = c(za_model_A@cval[1], za_model_B@cval[1], za_model_C@cval[1]),
+  Valor_Critico_5pct = c(za_model_A@cval[2], za_model_B@cval[2], za_model_C@cval[2]),
+  Valor_Critico_10pct = c(za_model_A@cval[3], za_model_B@cval[3], za_model_C@cval[3]),
+  Interpretación = c(
+    ifelse(za_model_A@teststat < za_model_A@cval[2], "Estacionaria", "No estacionaria"),
+    ifelse(za_model_B@teststat < za_model_B@cval[2], "Estacionaria", "No estacionaria"),
+    ifelse(za_model_C@teststat < za_model_C@cval[2], "Estacionaria", "No estacionaria")
+  )
+)
+
+kable(resultados_za,
+      digits = 4,
+      caption = "Prueba Zivot-Andrews de Raíz Unitaria con Quiebre Estructural",
+      booktabs = TRUE,
+      col.names = c("Modelo", "Estadístico", "V.C. 1%", "V.C. 5%", "V.C. 10%", "Interpretación"))
+```
+
+## Causalidad de Granger
+
+```{r}
+library(vars)
+
+vol_trim <- datos$volume[-1]
+rt_trim <- datos$rt[-1]                  
+
+bivariado <- cbind(rt_trim, vol_diff)
+colnames(bivariado) <- c("retorno", "volumen")
+
+# Seleccionamos rezagos óptimos
+lag_sel <- VARselect(bivariado, lag.max = 15, type = "const")
+k_opt <- lag_sel$selection["AIC(n)"]
+
+# Ajustamos VAR
+var_model <- VAR(bivariado, p = k_opt, type = "const")
+
+# Pruebas de Causalidad de Granger
+granger_vol <- causality(var_model, cause = "volumen")
+granger_ret <- causality(var_model, cause = "retorno")
+
+# Extraer valores correctamente
+stat_vol <- granger_vol$Granger[1]
+pval_vol <- granger_vol$Granger[3]
+stat_ret <- granger_ret$Granger[1]
+pval_ret <- granger_ret$Granger[3]
+
+# Creamos un data frame con los resultados
+resultados_granger <- data.frame(
+  Hipotesis = c("Volumen no causa Retorno", "Retorno no causa Volumen"),
+  Estadistico_F = c(stat_vol, stat_ret),
+  P_valor = c(pval_vol, pval_ret),
+  Interpretacion = c(
+    ifelse(pval_vol < 0.05, "Causalidad significativa", "Sin causalidad"),
+    ifelse(pval_ret < 0.05, "Causalidad significativa", "Sin causalidad")
+  )
+)
+
+names(resultados_granger) <- c("Hipótesis nula", "Estadístico F", "p-valor", "Interpretación")
+
+kable(resultados_granger,
+      digits = 4,
+      caption = "Prueba de Causalidad de Granger",
+      booktabs = TRUE)
+```
+
+## Modelo VAR
+
+```{r}
+# VAR: retorno, volumen, cambio porcentual 
+cambio_trim <- datos$change_pct[-1] 
+trivar <- cbind(rt_trim, vol_diff, cambio_trim)
+colnames(trivar) <- c("retorno", "volumen", "cambio_pct")
+
+# Rezagos óptimos
+lag_tri <- VARselect(trivar, lag.max = 15, type = "const")
+k_tri <- lag_tri$selection["AIC(n)"]
+
+# Ajustamos VAR
+var_model <- VAR(trivar, p = k_tri, type = "const")
+
+# Crear tabla de criterios de selección (sin nombres en los valores)
+resultados_lag <- data.frame(
+  Criterio = c("AIC", "BIC", "HQ"),
+  Rezagos_Optimos = c(as.numeric(lag_tri$selection["AIC(n)"]), 
+                      as.numeric(lag_tri$selection["BIC(n)"]), 
+                      as.numeric(lag_tri$selection["HQ(n)"]))
+)
+
+rownames(resultados_lag) <- NULL
+
+kable(resultados_lag,
+      digits = 0,
+      caption = "Selección de Rezagos Óptimos - VAR Trivariado",
+      booktabs = TRUE,
+      col.names = c("Criterio", "Rezagos Óptimos"))
+```
+
+### Impulso-Respuesta
+
+```{r, fig.cap="Impulso-Respuesta"}
+irf_rt <- irf(var_model, impulse = "volumen", response = "retorno",
+               n.ahead = 20, boot = TRUE, ci = 0.95)
+plot(irf_rt, main = "Respuesta del Retorno ante Impulso del Volumen")
+```
+
+**Interpretación:**
+
+En esta gráfica podemos observar una respuesta del retorno ante impulso del volumen oscilando entre $-6x10^{-4}$ y $6x10^{-4}$, valores insignificantes. Asimismo, si observamos la linea rojo (no punteada) se identifica que cruza el cero de manera repetida sin sostener una dirección, además, los intervalos de confianza tocan el cero en todos los periodos, de tal manera que el efecto no es estadisticamente distinto de cero en ningún horizonte de los 20 días analizados. 
+Esto indica que el volumen de las negociaciones no genera un impacto predecible sobre los retornos del oro, reforzando la ausencia de causalidad en el sentido de Granger. 
+
+### Descomposición de Varianza
+
+```{r, fig.cap="Descomposición de la Varianza", fig.width=10, fig.height=12}
+fevd_res <- fevd(var_model, n.ahead = 10)
+par(mar = c(4, 4, 2, 1))
+plot(fevd_res, main = "Descomposición de la Varianza del Error de Pronóstico")
+```
+
+**Interpretación:**
+
+En esta gráfica se refuerza los resultados de causalidad de granger e impulso-respuesta, ya que las tres variables analizadas expliccan su propia varianza en aproximadamente el 90% en los 10 periodos analizados y tampoco varia con el horizonte temporal. Esto indica que los retornos, el volumen y el cambio porcentual operan de forma independiente en la serie de tiempo.
+
+## Modelos ARCH y GARCH
+
+```{r}
+prueba_arch <- ArchTest(datos$rt, lags = 10)
+
+# Data frame de la prueba ARCH
+resultados_arch <- data.frame(
+  Prueba = "Prueba ARCH (10 rezagos)",
+  Estadistico = prueba_arch$statistic,
+  P_valor = prueba_arch$p.value,
+  Interpretación = ifelse(prueba_arch$p.value < 0.05, "Efectos ARCH significativos", "Sin efectos ARCH")
+)
+
+kable(resultados_arch,
+      digits = 6,
+      caption = "Prueba de Efectos ARCH en Retornos",
+      booktabs = TRUE,
+      col.names = c("Prueba", "Estadístico", "P-valor", "Interpretación"))
+```
+
+Dada la interpretación en la tabla, procedemos a estimar modelos ARCH y GARCH.
+
+```{r}
+spec_arch1 <- ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 0)),
+  mean.model = list(armaOrder = c(0, 0), include.mean = TRUE)
+)
+ajuste_arch1 <- ugarchfit(spec = spec_arch1, data = datos$rt)
+
+spec_arch4 <- ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(4, 0)),
+  mean.model = list(armaOrder = c(0, 0), include.mean = TRUE)
+)
+ajuste_arch4 <- ugarchfit(spec = spec_arch4, data = datos$rt)
+
+spec_garch11 <- ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 1)),
+  mean.model = list(armaOrder = c(0, 0), include.mean = TRUE),
+  distribution.model = "norm"
+)
+ajuste_garch11 <- ugarchfit(spec = spec_garch11, data = datos$rt)
+
+spec_garch12 <- ugarchspec(
+  variance.model = list(model = "sGARCH", garchOrder = c(1, 2)),
+  mean.model = list(armaOrder = c(0, 0), include.mean = TRUE)
+)
+ajuste_garch12 <- ugarchfit(spec = spec_garch12, data = datos$rt)
+
+# Comparación con criterios AIC, BIC Y HQIC
+resultados_info <- data.frame(
+  Modelo = c("ARCH(1)", "ARCH(4)", "GARCH(1,1)", "GARCH(1,2)"),
+  AIC = c(infocriteria(ajuste_arch1)[1], infocriteria(ajuste_arch4)[1], 
+          infocriteria(ajuste_garch11)[1], infocriteria(ajuste_garch12)[1]),
+  BIC = c(infocriteria(ajuste_arch1)[2], infocriteria(ajuste_arch4)[2], 
+          infocriteria(ajuste_garch11)[2], infocriteria(ajuste_garch12)[2]),
+  HQIC = c(infocriteria(ajuste_arch1)[3], infocriteria(ajuste_arch4)[3], 
+           infocriteria(ajuste_garch11)[3], infocriteria(ajuste_garch12)[3])
+)
+
+kable(resultados_info,
+      digits = 4,
+      caption = "Comparación de Criterios de Información - Modelos GARCH",
+      booktabs = TRUE,
+      col.names = c("Modelo", "AIC", "BIC", "HQIC"))
+```
+
+De acuerdo con el principio de parsimonia, seleccionamos el modelo GARCH(1,1) a estimar. 
+
+```{r}
+# Mejor modelo estimado
+residuos_estand <- residuals(ajuste_garch11, standardize = TRUE)
+
+# Prueba Ljun-Box sobre residuos estandarizados
+lb_residuos <- Box.test(residuos_estand, lag = 10, type = "Ljung-Box")
+
+# Prueba Ljung-Box sobre residuos al cuadrado
+lb_residuos_sq <- Box.test(residuos_estand^2, lag = 10, type = "Ljung-Box")
+
+# Data frame de los diagnósticos
+resultados_diag <- data.frame(
+  Prueba = c("Ljung-Box (Residuos)", "Ljung-Box (Residuos²)"),
+  Estadistico = c(lb_residuos$statistic, lb_residuos_sq$statistic),
+  P_valor = c(lb_residuos$p.value, lb_residuos_sq$p.value),
+  Interpretación = c(
+    ifelse(lb_residuos$p.value > 0.05, "Residuos sin autocorrelación", "Con autocorrelación"),
+    ifelse(lb_residuos_sq$p.value > 0.05, "Sin efectos ARCH residuales", "Con efectos ARCH")
+  )
+)
+
+kable(resultados_diag,
+      digits = 6,
+      caption = "Diagnóstico del Modelo GARCH(1,1)",
+      booktabs = TRUE,
+      col.names = c("Prueba", "Estadístico", "P-valor", "Conclusión"))
+```
+
+Estos resultados indican que el modelo GARCH(1,1) captura de manera correcta la fluctuación de la media condicional así como su varianza condicional, siendo el mejor modelo para los retornos del oro.
+
+## Graficas del modelo GARCH (1,1)
+
+```{r, fig.cap="GARCH(1,1)"}
+# Convertimos los retornos a un objeto xts con fechas correctas
+rt_xts <- xts(datos$rt, order.by = as.Date(datos$date))
+rt_xts <- na.omit(rt_xts)
+
+# Reestimamos el modelo con la serie xts
+ajuste_garch11 <- ugarchfit(spec = spec_garch11, data = rt_xts)
+
+# Gráficamos
+par(mfrow = c(1, 2))
+
+plot(ajuste_garch11, which = 1)   # Serie y media condicional
+plot(ajuste_garch11, which = 3)   # Volatilidad condicional
+
+par(mfrow = c(1, 1))
+```
+
+**Interpretación**
+
+En la primera gráfica se puede observar una flucturación de los retornos alrededor de cero (azul) meintras que las bandas de volatilidad condicional (rojas) se expanden pero también se contraen en el tiempo. Si observamos, el comportamiento de las bandas de volatilidad se vuelven a repetir en periodos como 2008, 2020, 2025, de tal manera que, nuestro modelo está capturando significativmanete los periodos de alta volatilidad e incertidumbre de los futuros del oro.
+
+Por otro lado, en la siguiente gráfica se encuentra la desviación estándar condicional estimada (azul) y los retornos absolutos (gris): se observan nivelels bajos en la mayor parte del periodo pero se vuelve a pronunciar en las fechas mencionadas con anterioridad. Esto indica que la volatilidad va a la alza cuando existen choques pero despues decrece gradualmente, subrayando un comportamiento de alta persistencia. 
+
